@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pixel Battleship Warzone</title>
+<style>
+body{
+  margin:0;
+  overflow:hidden;
+  background:black;
+  font-family:monospace;
+  color:white;
+  touch-action:none;
+}
+canvas{display:block;}
+#ui{
+  position:absolute;
+  top:15px;
+  left:15px;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+Score: <span id="score">0</span><br>
+Hull: <span id="health">5</span>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const PIXEL = 6;
+
+let score = 0;
+let gameOver = false;
+let shake = 0;
+
+const bullets = [];
+const enemyBullets = [];
+const enemies = [];
+const explosions = [];
+const stars = [];
+
+const player = {
+  x: canvas.width/2,
+  y: canvas.height - 140,
+  health: 5
+};
+
+/* ===== PLAYER SPRITE ===== */
+const playerSprite = [
+"000W000",
+"00WWW00",
+"0WWWWW0",
+"WWWWWWW",
+"WRWBWRW",
+"00W0W00",
+"00R0R00"
+];
+
+/* ===== ENEMY TYPES ===== */
+const enemyTypes = [
+
+  // Fighter
+  [
+  "00RR00",
+  "0RRRR0",
+  "RRRRRR",
+  "0R00R0"
+  ],
+
+  // Wide Cruiser
+  [
+  "RRRRRRRR",
+  "0RRRRRR0",
+  "00R00R00"
+  ],
+
+  // Alien Bug
+  [
+  "0R00R0",
+  "RRRRRR",
+  "R0RR0R",
+  "00RR00"
+  ]
+
+];
+
+/* ===== DRAW SPRITE ===== */
+function drawSprite(sprite, x, y){
+  for(let r=0;r<sprite.length;r++){
+    for(let c=0;c<sprite[r].length;c++){
+      const ch = sprite[r][c];
+      if(ch==="W") ctx.fillStyle="white";
+      else if(ch==="R") ctx.fillStyle="red";
+      else if(ch==="B") ctx.fillStyle="deepskyblue";
+      else continue;
+
+      ctx.fillRect(x+c*PIXEL, y+r*PIXEL, PIXEL, PIXEL);
+    }
+  }
+}
+
+/* ===== STARFIELD ===== */
+for(let i=0;i<150;i++){
+  stars.push({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    speed:Math.random()*2+0.5
+  });
+}
+
+/* ===== TOUCH CONTROL ===== */
+canvas.addEventListener("touchmove", e=>{
+  const t=e.touches[0];
+  player.x=t.clientX-3.5*PIXEL;
+  player.y=t.clientY-4*PIXEL;
+});
+
+/* ===== PLAYER SHOOT ===== */
+setInterval(()=>{
+  if(gameOver) return;
+  bullets.push({
+    x:player.x+3*PIXEL,
+    y:player.y,
+    speed:8
+  });
+},250);
+
+/* ===== SPAWN ENEMIES ===== */
+setInterval(()=>{
+  if(gameOver) return;
+
+  const type = enemyTypes[Math.floor(Math.random()*enemyTypes.length)];
+
+  enemies.push({
+    x:Math.random()*(canvas.width-60),
+    y:-60,
+    sprite:type,
+    health:3,
+    shootTimer: Math.random()*100
+  });
+
+},1200);
+
+/* ===== EXPLOSION ===== */
+function createExplosion(x,y){
+  for(let i=0;i<25;i++){
+    explosions.push({
+      x:x,
+      y:y,
+      dx:(Math.random()-0.5)*6,
+      dy:(Math.random()-0.5)*6,
+      life:20
+    });
+  }
+}
+
+/* ===== UPDATE ===== */
+function update(){
+
+  if(shake>0) shake--;
+
+  stars.forEach(s=>{
+    s.y+=s.speed;
+    if(s.y>canvas.height){
+      s.y=0;
+      s.x=Math.random()*canvas.width;
+    }
+  });
+
+  bullets.forEach((b,i)=>{
+    b.y-=b.speed;
+    if(b.y<0) bullets.splice(i,1);
+  });
+
+  enemyBullets.forEach((b,i)=>{
+    b.y+=b.speed;
+    if(b.y>canvas.height) enemyBullets.splice(i,1);
+
+    // PLAYER HIT
+    if(
+      b.x>player.x &&
+      b.x<player.x+7*PIXEL &&
+      b.y>player.y &&
+      b.y<player.y+7*PIXEL
+    ){
+      player.health--;
+      document.getElementById("health").textContent=player.health;
+      enemyBullets.splice(i,1);
+      shake = 15; // SCREEN SHAKE
+      createExplosion(player.x+20,player.y+20);
+
+      if(player.health<=0){
+        gameOver=true;
+        setTimeout(()=>{
+          alert("GAME OVER\nScore: "+score);
+          location.reload();
+        },500);
+      }
+    }
+  });
+
+  enemies.forEach((e,ei)=>{
+
+    e.y+=2;
+
+    // ENEMY SHOOT
+    e.shootTimer++;
+    if(e.shootTimer>100){
+      enemyBullets.push({
+        x:e.x+20,
+        y:e.y+20,
+        speed:5
+      });
+      e.shootTimer=0;
+    }
+
+    bullets.forEach((b,bi)=>{
+      if(
+        b.x>e.x &&
+        b.x<e.x+60 &&
+        b.y>e.y &&
+        b.y<e.y+40
+      ){
+        e.health--;
+        bullets.splice(bi,1);
+        if(e.health<=0){
+          score+=40;
+          document.getElementById("score").textContent=score;
+          createExplosion(e.x+20,e.y+20);
+          enemies.splice(ei,1);
+        }
+      }
+    });
+  });
+
+  explosions.forEach((ex,i)=>{
+    ex.x+=ex.dx;
+    ex.y+=ex.dy;
+    ex.life--;
+    if(ex.life<=0) explosions.splice(i,1);
+  });
+}
+
+/* ===== DRAW ===== */
+function draw(){
+
+  ctx.save();
+
+  if(shake>0){
+    ctx.translate(
+      (Math.random()-0.5)*10,
+      (Math.random()-0.5)*10
+    );
+  }
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.fillStyle="white";
+  stars.forEach(s=>ctx.fillRect(s.x,s.y,2,2));
+
+  drawSprite(playerSprite,player.x,player.y);
+
+  ctx.fillStyle="orange";
+  ctx.fillRect(player.x+2*PIXEL, player.y+7*PIXEL, PIXEL, PIXEL*2);
+  ctx.fillRect(player.x+4*PIXEL, player.y+7*PIXEL, PIXEL, PIXEL*2);
+
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=>{
+    ctx.fillRect(b.x,b.y,PIXEL,PIXEL*2);
+  });
+
+  ctx.fillStyle="cyan";
+  enemyBullets.forEach(b=>{
+    ctx.fillRect(b.x,b.y,PIXEL,PIXEL*2);
+  });
+
+  enemies.forEach(e=>{
+    drawSprite(e.sprite,e.x,e.y);
+  });
+
+  ctx.fillStyle="orange";
+  explosions.forEach(ex=>{
+    ctx.fillRect(ex.x,ex.y,PIXEL,PIXEL);
+  });
+
+  ctx.restore();
+}
+
+/* ===== GAME LOOP ===== */
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
